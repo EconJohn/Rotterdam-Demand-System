@@ -1,0 +1,79 @@
+library(systemfit)
+library(dplyr)
+
+#Load Data set
+#Data is in millions of dollars
+df<-read.csv("")
+attach(df)
+names(df)
+dim(df)
+View(df)
+
+#The problem with expenditure data is that we dont have separate information on prices and
+#quantities so we employ the following proceedure
+
+#Price Estimation:
+gas_price_est<-Gas/fitted(lm(Gas~Time))
+elec_price_est<-Electricity/fitted(lm(Electricity~Time))
+water_price_est<-
+  Water.supply.and.sanitation.services/fitted(lm(Water.supply.and.sanitation.services~Time))
+
+#get variables of first differenced logged variables:
+dlgasp<-diff(log(gas_price_est))
+dlelep<-diff(log(elec_price_est))
+dlwatp<-diff(log(water_price_est))
+
+#get quantities
+gas_quant_est<-Gas/gas_price_est
+elec_quant_est<-Electricity/elec_price_est
+wat_quant_est<-Water.supply.and.sanitation.services/water_price_est
+
+#Total Expenditure:
+Texpend<-Gas+Electricity+Water.supply.and.sanitation.services
+
+#get budget share data:
+gasshare<-Gas/Texpend
+eleshare<-Electricity/Texpend
+watshare<-Water.supply.and.sanitation.services/Texpend
+
+#Preping share data for discrete version:
+gasshared<-(gasshare+lag(gasshare,1))/2
+eleshared<-(eleshare+lag(eleshare,1))/2
+watshared<-(watshare+lag(watshare,1))/2
+
+#Get Divisa Price index:
+#(NOTE: We take away the first term from 
+#transformed data because the first term in lag(-share,1) term is "NA")
+dlogP<-gasshared[-1]*dlgasp+eleshared[-1]*dlelep+watshared[-1]*dlwatp
+
+#Get Divisa Quantity Index:
+dlogQ<-diff(log(Texpend))-dlogP
+
+#modify dependent variables 
+gasd<-gasshared[-1]*diff(log(gas_quant_est))
+eled<-eleshared[-1]*diff(log(elec_quant_est))
+watd<-watshared[-1]*diff(log(wat_quant_est))
+
+#Rotterdam system of equations:
+gasr<-gasd~dlgasp+dlelep+dlwatp+dlogQ
+eler<-eled~dlgasp+dlelep+dlwatp+dlogQ
+watr<-watd~dlgasp+dlelep+dlwatp+dlogQ
+
+#estimate the system
+Rtdm<-systemfit(list(gasreg=gasr, elecreg=eler,waterreg=watr),method="SUR")
+summary(Rtdm)
+
+#Coefficents
+coef(Rtdm)
+
+#in this framework we can check the conditions for theoretically consistent
+#consumer demand system.
+#Check Cornout Aggregation
+sum(coef(Rtdm)[2],coef(Rtdm)[3],coef(Rtdm)[4])
+sum(coef(Rtdm)[7],coef(Rtdm)[8],coef(Rtdm)[9])
+sum(coef(Rtdm)[2],coef(Rtdm)[3],coef(Rtdm)[14])
+
+#Check Engel aggregation
+sum(coef(Rtdm)[5],coef(Rtdm)[10],coef(Rtdm)[15])
+
+#Adding up condition is satisfied by construction
